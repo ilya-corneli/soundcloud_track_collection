@@ -3,51 +3,85 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from bs4 import BeautifulSoup
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import time
 
-def get_liked_tracks(driver):
-    """
-    Функция для получения информации о понравившихся треках.
-    """
-    tracks = []
-    soup = BeautifulSoup(driver.page_source, "html.parser")
+def get_track_titles(driver):
+    titles = set()
+    try:
+        elements = driver.find_elements(By.CSS_SELECTOR, "a.sc-link-primary.soundTitle__title")
+        for element in elements:
+            title = element.text.strip()
+            if title:
+                titles.add(title)
+        print(f"Found {len(titles)} titles in this iteration")
+        if len(titles) == 0:
+            print("DEBUG: Page source snippet:")
+            print(driver.page_source[:1000])
+    except Exception as e:
+        print(f"Error in get_track_titles: {e}")
+    return titles
 
-    for item in soup.find_all("li", class_="soundList__item"):
-        artist = item.find("a", class_="soundTitle__username").text.strip()
-        title = item.find("a", class_="sc-link-primary").text.strip()
-        tracks.append({"artist": artist, "title": title})
-    return tracks
+service = Service(r"C:\Windows\System32\chromedriver-win64\chromedriver-win64\chromedriver.exe")
+options = webdriver.ChromeOptions()
+options.add_argument("--start-maximized")
+driver = webdriver.Chrome(service=service, options=options)
 
-# Инициализация WebDriver (замените на путь к вашему ChromeDriver)
-service = Service(r"C:\Windows\System32\chromedriver-win64\chromedriver-win64\chromedriver.exe")  # Используем сырую строку для пути
-driver = webdriver.Chrome(service=service)
-
-# Замените на URL вашей страницы с лайками
-likes_url = "https://soundcloud.com/ilyacorneli/likes"
+likes_url = "https://soundcloud.com/matisaxx/likes"
 driver.get(likes_url)
+print(f"Opened URL: {likes_url}")
 
-# Ожидание загрузки начального контента
-wait = WebDriverWait(driver, 10)
-wait.until(EC.presence_of_element_located((By.CLASS_NAME, "soundList__item")))
+print("Please accept cookies manually and press Enter when ready...")
+input()
 
-all_tracks = []
-# Прокрутка страницы вниз и загрузка новых треков
+try:
+    wait = WebDriverWait(driver, 30)
+    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "soundList__item")))
+    print("Initial content loaded")
+except TimeoutException:
+    print("Timeout waiting for initial content to load")
+    print("DEBUG: Current page title:", driver.title)
+    print("DEBUG: Current URL:", driver.current_url)
+
+all_titles = set()
 last_height = driver.execute_script("return document.body.scrollHeight")
-while True:
+scroll_pause_time = 5
+no_new_tracks_count = 0
+max_scrolls = 10
+
+for scroll in range(max_scrolls):
+    print(f"Scroll attempt {scroll + 1}")
+
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(2)  # Дайте время на загрузку новых элементов
+    time.sleep(scroll_pause_time)
+
+    new_titles = get_track_titles(driver)
+
+    if len(new_titles - all_titles) == 0:
+        no_new_tracks_count += 1
+        print(f"No new tracks found. Count: {no_new_tracks_count}")
+    else:
+        no_new_tracks_count = 0
+        print(f"Found {len(new_titles - all_titles)} new tracks")
+
+    all_titles.update(new_titles)
+    print(f"Total unique tracks so far: {len(all_titles)}")
+
+    if no_new_tracks_count >= 3:
+        print("No new tracks for 3 consecutive scrolls. Stopping.")
+        break
 
     new_height = driver.execute_script("return document.body.scrollHeight")
     if new_height == last_height:
+        print("Page height didn't change. Stopping.")
         break
     last_height = new_height
 
-    tracks = get_liked_tracks(driver)
-    all_tracks.extend(tracks)
+print("\nFinal results:")
+for title in sorted(all_titles):
+    print(title)
 
-# Вывод информации о треках
-for track in all_tracks:
-    print(f"Artist: {track['artist']}, Track: {track['title']}")
+print(f"\nTotal unique tracks: {len(all_titles)}")
 
 driver.quit()
+print("Browser closed")
