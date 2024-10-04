@@ -83,5 +83,8 @@ for title in sorted(all_titles):
 
 print(f"\nTotal unique tracks: {len(all_titles)}")
 
+
+
+
 driver.quit()
 print("Browser closed")
