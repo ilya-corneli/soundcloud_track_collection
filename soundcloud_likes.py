@@ -1,20 +1,17 @@
-import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+import time
 
-def get_liked_tracks(url):
+def get_liked_tracks(driver):
     """
-    Функция для получения информации о понравившихся треках с SoundCloud.
-
-    Args:
-        url: URL страницы с лайками пользователя.
-
-    Returns:
-        Список словарей, где каждый словарь содержит информацию о треке 
-        (исполнитель и название).
+    Функция для получения информации о понравившихся треках.
     """
     tracks = []
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
+    soup = BeautifulSoup(driver.page_source, "html.parser")
 
     for item in soup.find_all("li", class_="soundList__item"):
         artist = item.find("a", class_="soundTitle__username").text.strip()
@@ -22,22 +19,35 @@ def get_liked_tracks(url):
         tracks.append({"artist": artist, "title": title})
     return tracks
 
+# Инициализация WebDriver (замените на путь к вашему ChromeDriver)
+service = Service(r"C:\Windows\System32\chromedriver-win64\chromedriver-win64\chromedriver.exe")  # Используем сырую строку для пути
+driver = webdriver.Chrome(service=service)
+
 # Замените на URL вашей страницы с лайками
-likes_url = "https://soundcloud.com/ilyacorneli/likes" 
+likes_url = "https://soundcloud.com/ilyacorneli/likes"
+driver.get(likes_url)
+
+# Ожидание загрузки начального контента
+wait = WebDriverWait(driver, 10)
+wait.until(EC.presence_of_element_located((By.CLASS_NAME, "soundList__item")))
 
 all_tracks = []
-# SoundCloud загружает контент динамически, поэтому нужно обрабатывать несколько страниц
-while likes_url:
-    tracks = get_liked_tracks(likes_url)
-    all_tracks.extend(tracks)
+# Прокрутка страницы вниз и загрузка новых треков
+last_height = driver.execute_script("return document.body.scrollHeight")
+while True:
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(2)  # Дайте время на загрузку новых элементов
 
-    # Поиск ссылки на следующую страницу
-    next_page_link = soup.find("a", class_="  pagination-next")
-    if next_page_link:
-        likes_url = "https://soundcloud.com" + next_page_link["href"] 
-    else:
-        likes_url = None
+    new_height = driver.execute_script("return document.body.scrollHeight")
+    if new_height == last_height:
+        break
+    last_height = new_height
+
+    tracks = get_liked_tracks(driver)
+    all_tracks.extend(tracks)
 
 # Вывод информации о треках
 for track in all_tracks:
-    print(f"Artist: {track['artist']}, Track: {track['title']}") 
+    print(f"Artist: {track['artist']}, Track: {track['title']}")
+
+driver.quit()
