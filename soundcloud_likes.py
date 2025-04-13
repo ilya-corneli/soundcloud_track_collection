@@ -9,7 +9,7 @@ import time
 def get_track_titles(driver):
     titles = set()
     try:
-        elements = driver.find_elements(By.CSS_SELECTOR, "a.sc-link-primary.soundTitle__title")
+        elements = driver.find_elements(By.CSS_SELECTOR, "a.soundTitle__title.sc-link-dark")
         for element in elements:
             title = element.text.strip()
             if title:
@@ -22,9 +22,14 @@ def get_track_titles(driver):
         print(f"Error in get_track_titles: {e}")
     return titles
 
-service = Service(r"C:\Windows\System32\chromedriver-win64\chromedriver-win64\chromedriver.exe")
+service = Service(r"C:\\files\\MEGA\\it\\Projects\\soundcloud_collection_name\\src\\chromedriver-win64\\chromedriver.exe")
 options = webdriver.ChromeOptions()
 options.add_argument("--start-maximized")
+options.add_argument("--ignore-certificate-errors")
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-gpu")
+options.add_argument("--disable-extensions")
 driver = webdriver.Chrome(service=service, options=options)
 
 likes_url = "https://soundcloud.com/matisaxx/likes"
@@ -35,7 +40,7 @@ print("Please accept cookies manually and press Enter when ready...")
 input()
 
 try:
-    wait = WebDriverWait(driver, 30)
+    wait = WebDriverWait(driver, 60)
     wait.until(EC.presence_of_element_located((By.CLASS_NAME, "soundList__item")))
     print("Initial content loaded")
 except TimeoutException:
@@ -45,7 +50,7 @@ except TimeoutException:
 
 all_titles = set()
 last_height = driver.execute_script("return document.body.scrollHeight")
-scroll_pause_time = 5
+scroll_pause_time = 8
 no_new_tracks_count = 0
 max_scrolls = 10
 
