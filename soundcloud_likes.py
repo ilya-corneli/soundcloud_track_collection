@@ -53,19 +53,24 @@ options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--disable-gpu")
 options.add_argument("--disable-extensions")
-driver = webdriver.Chrome(service=service, options=options)
+# Do not initialize driver here yet
+# driver = webdriver.Chrome(service=service, options=options)
 
-# Ask user for the SoundCloud likes URL
-while True:
-    likes_url = input("Please enter the full URL of the SoundCloud likes page: ").strip()
-    if likes_url.startswith("https://soundcloud.com/") and "/likes" in likes_url:
-        break # Exit loop if URL seems valid
-    else:
-        print("Invalid URL. Please make sure it starts with 'https://soundcloud.com/' and contains '/likes'. Try again.")
+# Ask user for the SoundCloud likes URL FIRST
+likes_url = input("Please enter the full URL of the SoundCloud likes page: ").strip()
+print(f"URL entered: {likes_url}")
+
+# NOW initialize the driver
+print("Initializing browser...")
+driver = webdriver.Chrome(service=service, options=options)
+print("Browser initialized.")
+
+# Add a small delay before loading the page
+time.sleep(1)
 
 # likes_url = "https://soundcloud.com/matisaxx/likes" # Old hardcoded URL
+print(f"Attempting to open URL: {likes_url}")
 driver.get(likes_url)
-print(f"Opening URL: {likes_url}")
 
 # --- Remove manual cookie acceptance ---
 # print("Please accept cookies manually and press Enter when ready...")
@@ -105,7 +110,7 @@ seen_urls = set()
 last_height = driver.execute_script("return document.body.scrollHeight")
 scroll_pause_time = 8 / 3 # Reduce pause time to approx 2.67 seconds
 no_new_tracks_count = 0
-max_scrolls = 10
+max_scrolls = 350 # Increase scroll limit to 350 for large lists
 scroll = 0
 
 while scroll < max_scrolls:
