@@ -5,22 +5,45 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import time
+import csv
+import os
 
-def get_track_titles(driver):
-    titles = set()
+def get_track_data(driver):
+    tracks_in_this_view = [] # Return a list to preserve order found
     try:
-        elements = driver.find_elements(By.CSS_SELECTOR, "a.soundTitle__title.sc-link-dark")
-        for element in elements:
-            title = element.text.strip()
-            if title:
-                titles.add(title)
-        print(f"Found {len(titles)} titles in this iteration")
-        if len(titles) == 0:
-            print("DEBUG: Page source snippet:")
-            print(driver.page_source[:1000])
-    except Exception as e:
-        print(f"Error in get_track_titles: {e}")
-    return titles
+        # Find the container elements first
+        container_elements = driver.find_elements(By.CSS_SELECTOR, "li.soundList__item")
+        print(f"Found {len(container_elements)} track containers in current view.")
+
+        for container in container_elements:
+            try:
+                # Find the title link *within* this container
+                title_link = container.find_element(By.CSS_SELECTOR, "a.soundTitle__title.sc-link-dark")
+                title = title_link.text.strip()
+                url = title_link.get_attribute('href')
+
+                if title and url:
+                    tracks_in_this_view.append((title, url))
+                else:
+                    # Optional: Warn if title or URL is empty
+                    # print(f"Warning: Found link but title or URL is empty in container: {container.text[:100]}...")
+                    pass
+
+            except NoSuchElementException:
+                # This container might be an ad or something else without a standard title link
+                # print(f"Warning: Could not find title link in container: {container.text[:100]}...")
+                pass # Silently ignore containers without the expected title link
+            except Exception as e_inner:
+                print(f"Error processing a container: {e_inner}")
+
+        # Optional debug print if the list is empty after processing containers
+        # if not tracks_in_this_view and len(container_elements) > 0:
+        #     print("DEBUG: Found containers but extracted no track data.")
+
+    except Exception as e_outer:
+        print(f"Error finding track containers: {e_outer}")
+
+    return tracks_in_this_view
 
 service = Service(r"C:\\files\\MEGA\\it\\Projects\\soundcloud_collection_name\\src\\chromedriver-win64\\chromedriver.exe")
 options = webdriver.ChromeOptions()
@@ -32,61 +55,125 @@ options.add_argument("--disable-gpu")
 options.add_argument("--disable-extensions")
 driver = webdriver.Chrome(service=service, options=options)
 
-likes_url = "https://soundcloud.com/matisaxx/likes"
-driver.get(likes_url)
-print(f"Opened URL: {likes_url}")
+# Ask user for the SoundCloud likes URL
+while True:
+    likes_url = input("Please enter the full URL of the SoundCloud likes page: ").strip()
+    if likes_url.startswith("https://soundcloud.com/") and "/likes" in likes_url:
+        break # Exit loop if URL seems valid
+    else:
+        print("Invalid URL. Please make sure it starts with 'https://soundcloud.com/' and contains '/likes'. Try again.")
 
-print("Please accept cookies manually and press Enter when ready...")
-input()
+# likes_url = "https://soundcloud.com/matisaxx/likes" # Old hardcoded URL
+driver.get(likes_url)
+print(f"Opening URL: {likes_url}")
+
+# --- Remove manual cookie acceptance ---
+# print("Please accept cookies manually and press Enter when ready...")
+# input()
+
+# +++ Add automatic cookie acceptance +++
+cookie_button_id = "onetrust-accept-btn-handler"
+try:
+    print(f"Waiting for cookie accept button (ID: {cookie_button_id})...")
+    cookie_wait = WebDriverWait(driver, 15) # Wait up to 15 seconds for the button
+    accept_button = cookie_wait.until(
+        EC.element_to_be_clickable((By.ID, cookie_button_id))
+    )
+    accept_button.click()
+    print("Cookie button clicked automatically.")
+    time.sleep(2) # Short pause after clicking
+except TimeoutException:
+    print("Cookie accept button did not appear within 15 seconds (might be already accepted or not present).")
+except Exception as e:
+    print(f"An error occurred while trying to click the cookie button: {e}")
+# +++ End automatic cookie acceptance +++
 
 try:
+    print("Waiting for main content after handling cookies...")
     wait = WebDriverWait(driver, 60)
     wait.until(EC.presence_of_element_located((By.CLASS_NAME, "soundList__item")))
-    print("Initial content loaded")
+    print("Initial content loaded or page ready")
+    print("Waiting a few seconds for page to stabilize...")
+    time.sleep(5)
 except TimeoutException:
-    print("Timeout waiting for initial content to load")
+    print("Timeout waiting for initial content elements")
     print("DEBUG: Current page title:", driver.title)
     print("DEBUG: Current URL:", driver.current_url)
 
-all_titles = set()
+all_tracks = []
+seen_urls = set()
 last_height = driver.execute_script("return document.body.scrollHeight")
-scroll_pause_time = 8
+scroll_pause_time = 8 / 3 # Reduce pause time to approx 2.67 seconds
 no_new_tracks_count = 0
 max_scrolls = 10
+scroll = 0
 
-for scroll in range(max_scrolls):
+while scroll < max_scrolls:
     print(f"Scroll attempt {scroll + 1}")
 
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(scroll_pause_time)
+    new_tracks_in_view = get_track_data(driver)
 
-    new_titles = get_track_titles(driver)
+    added_count = 0
+    for track_tuple in new_tracks_in_view:
+        title, url = track_tuple
+        if url not in seen_urls:
+            all_tracks.append(track_tuple)
+            seen_urls.add(url)
+            added_count += 1
 
-    if len(new_titles - all_titles) == 0:
+    if added_count == 0 and scroll > 0:
         no_new_tracks_count += 1
-        print(f"No new tracks found. Count: {no_new_tracks_count}")
+        print(f"No new unique tracks found in this view. Consecutive empty views: {no_new_tracks_count}")
     else:
         no_new_tracks_count = 0
-        print(f"Found {len(new_titles - all_titles)} new tracks")
+        if added_count > 0:
+             print(f"Added {added_count} new unique tracks from this view.")
 
-    all_titles.update(new_titles)
-    print(f"Total unique tracks so far: {len(all_titles)}")
+    print(f"Total unique tracks collected so far: {len(all_tracks)}")
 
     if no_new_tracks_count >= 3:
-        print("No new tracks for 3 consecutive scrolls. Stopping.")
+        print("No new unique tracks added for 3 consecutive views. Stopping scroll.")
         break
+
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    print("Scrolling down...")
+    time.sleep(scroll_pause_time)
 
     new_height = driver.execute_script("return document.body.scrollHeight")
     if new_height == last_height:
-        print("Page height didn't change. Stopping.")
-        break
+        print("Page height did not increase after scroll and wait. Checking again...")
+        time.sleep(scroll_pause_time / 2)
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+             print("Page height still unchanged. Likely end of content. Stopping scroll.")
+             break
+
     last_height = new_height
+    scroll += 1
 
-print("\nFinal results:")
-for title in sorted(all_titles):
-    print(title)
+if scroll >= max_scrolls:
+    print(f"Reached maximum scroll limit ({max_scrolls}). Stopping.")
 
-print(f"\nTotal unique tracks: {len(all_titles)}")
+csv_filename = "soundcloud_likes.csv"
+csv_fullpath = os.path.abspath(csv_filename)
+print(f"\nAttempting to write CSV to: {csv_fullpath}")
+try:
+    with open(csv_fullpath, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Title', 'URL'])
+        for title, url in all_tracks:
+            writer.writerow([title, url])
+    print(f"\nSuccessfully wrote {len(all_tracks)} tracks to {csv_fullpath}")
+except IOError as e:
+    print(f"\nError writing to CSV file {csv_fullpath}: {e}")
+
+print("\nFinal track list (in order found):")
+if not all_tracks:
+    print("No tracks found.")
+else:
+    for i, (title, url) in enumerate(all_tracks):
+        print(f"{i+1}. {title} - {url}")
+print(f"\nTotal unique tracks collected: {len(all_tracks)}")
 
 driver.quit()
 print("Browser closed")
