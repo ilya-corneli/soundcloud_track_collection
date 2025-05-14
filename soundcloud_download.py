@@ -13,11 +13,11 @@ def download_audio(video_urls: list, output_path: str, archive_file: str):
         'extract_audio': True,       # Ensure only audio is kept
         # 'audio_format': 'mp3',   # Removed: Conflicts with postprocessor preferredcodec
         'outtmpl': os.path.join(output_path, '%(uploader)s - %(title)s.%(ext)s'), # Use os.path.join for cross-platform compatibility
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'aac', # Convert final audio to aac
-            'preferredquality': '192', # Target quality
-        }],
+        # 'postprocessors': [{
+        #     'key': 'FFmpegExtractAudio',
+        #     'preferredcodec': 'aac', # Convert final audio to aac
+        #     'preferredquality': '192', # Target quality
+        # }],
         'download_archive': archive_file, # File to track downloaded files
         'ignoreerrors': True,          # Continue processing even if one URL fails
         'quiet': False,                # Show yt-dlp output (can be set to True for less verbose logs)
@@ -38,7 +38,7 @@ def download_audio(video_urls: list, output_path: str, archive_file: str):
 
 def main():
     csv_filename = 'soundcloud_likes.csv'
-    output_path = "G:\\mediafiles\\audio\\audiobooks" # Target download directory
+    output_path = "G:\\mediafiles\\audio\\music\\Soundcloud" # Target download directory
     archive_file = 'downloaded_archive.txt'    # File to keep track of downloaded items
 
     urls_to_download = []
